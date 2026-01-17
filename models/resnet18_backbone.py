@@ -59,10 +59,8 @@ class ResNet18FeatureExtractor(nn.Module):
         if not ckpt_path.exists():
             raise FileNotFoundError(f"指定的 ResNet18 checkpoint 不存在: {ckpt_path}")
         
-        # 优化：添加 map_location 确保加载到正确的设备
         state_dict = torch.load(ckpt_path, map_location="cpu")
         
-        # 优化：处理 state_dict 的前缀问题（有些 checkpoint 会有 'model.' 前缀）
         if "model" in state_dict:
             state_dict = state_dict["model"]
             
