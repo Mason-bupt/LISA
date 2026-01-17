@@ -14,8 +14,8 @@ from torch.utils.data import DataLoader, Subset
 
 from dataset import FaceGazeDataset, get_train_transform, get_val_transform
 from models import ResNetFAMLite, ResNetFAMLiteConfig
-from models.clip_gaze import (
-           CLIPGazeConfig,
+from models.sdm import (
+           SDMConfig,
            feature_separation_loss,
 )
 
@@ -40,10 +40,9 @@ def parse_args() -> argparse.Namespace:
            parser.add_argument("--test_indices_file", type=str, default="test_indices_by_subject.json", help="测试集索引保存路径")
            parser.add_argument("--amp", action="store_true", help="启用CUDA自动混合精度")
            parser.add_argument("--compile", action="store_true", help="尝试torch.compile加速")
-           # CLIP-Gaze相关参数（简化版）
-           parser.add_argument("--use_clip_gaze", action="store_true", default=True, help="启用CLIP-Gaze（默认启用）")
-           parser.add_argument("--no-use-clip-gaze", dest="use_clip_gaze", action="store_false", help="禁用CLIP-Gaze")
-           parser.add_argument("--clip_separation_weight", type=float, default=100.0, help="特征分离损失权重（提高以激活CLIP分支，建议100-500）")
+           parser.add_argument("--use_sdm", action="store_true", default=True, help="启用SDM（默认启用）")
+           parser.add_argument("--no-use-sdm", dest="use_sdm", action="store_false", help="禁用SDM")
+           parser.add_argument("--sdm_separation_weight", type=float, default=100.0, help="特征分离损失权重")
            parser.add_argument("--max_grad_norm", type=float, default=1.0, help="梯度裁剪的最大范数")
            parser.add_argument("--log_dir", type=str, default="logs", help="训练日志保存目录")
            # 学习率调度相关参数
@@ -143,8 +142,8 @@ def train_one_epoch(
            device: torch.device,
            epoch: int,
            log_interval: int,
-           use_clip_gaze: bool = True,
-           clip_separation_weight: float = 0.5,
+           use_sdm: bool = True,
+           sdm_separation_weight: float = 0.5,
            scaler: Optional[torch.cuda.amp.GradScaler] = None,
            max_grad_norm: float = 1.0,
 ) -> float:
@@ -163,16 +162,15 @@ def train_one_epoch(
                                loss_ang = angular_loss_deg(gaze_pred, targets)
                                loss = loss_l1 + 0.5 * loss_ang
                                      
-                               # CLIP-Gaze损失：特征分离损失（push away与注视无关的特征）
                                loss_separation = None
-                               if use_clip_gaze and "gaze_features_proj" in outputs:
+                               if use_sdm and "gaze_features_proj" in outputs:
                                          gaze_features_proj = outputs["gaze_features_proj"]
                                          text_features = outputs["text_features"]
                                                
                                          loss_separation = feature_separation_loss(
                                                    gaze_features_proj, text_features
                                          )
-                                         loss = loss + clip_separation_weight * loss_separation
+                                         loss = loss + sdm_separation_weight * loss_separation
 
                      # 检查损失是否为NaN或Inf
                      if torch.isnan(loss) or torch.isinf(loss):
@@ -302,8 +300,8 @@ class TrainingLogger:
                                "val_subjects": args.val_subjects,
                                "test_subjects": args.test_subjects,
                                "device": args.device,
-                               "use_clip_gaze": args.use_clip_gaze,
-                               "clip_separation_weight": args.clip_separation_weight,
+                               "use_sdm": args.use_sdm,
+                               "sdm_separation_weight": args.sdm_separation_weight,
                                "max_grad_norm": args.max_grad_norm,
                                "amp": args.amp,
                                "compile": args.compile,
@@ -448,16 +446,15 @@ def main() -> None:
                      persistent_workers=args.persistent_workers and args.num_workers > 0,
            )
 
-           # 配置CLIP-Gaze（简化版）
-           clip_gaze_config = None
-           if args.use_clip_gaze:
-                     clip_gaze_config = CLIPGazeConfig(
-                               feature_separation_weight=args.clip_separation_weight,
+           sdm_config = None
+           if args.use_sdm:
+                     sdm_config = SDMConfig(
+                               feature_separation_weight=args.sdm_separation_weight,
                      )
                  
            cfg = ResNetFAMLiteConfig(
-                     use_clip_gaze=args.use_clip_gaze,
-                     clip_gaze_config=clip_gaze_config,
+                     use_sdm=args.use_sdm,
+                     sdm_config=sdm_config,
            )
            model = ResNetFAMLite(cfg).to(device)
            if args.compile and hasattr(torch, "compile"):
@@ -524,8 +521,8 @@ def main() -> None:
                                device,
                                epoch,
                                args.log_interval,
-                               use_clip_gaze=args.use_clip_gaze,
-                               clip_separation_weight=args.clip_separation_weight,
+                               use_sdm=args.use_sdm,
+                               sdm_separation_weight=args.sdm_separation_weight,
                                scaler=scaler if use_amp else None,
                                max_grad_norm=args.max_grad_norm,
                      )

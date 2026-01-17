@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Subset
 
 from dataset import FaceGazeDataset, get_val_transform
 from models import ResNetFAMLite, ResNetFAMLiteConfig
-from models.clip_gaze import CLIPGazeConfig
+from models.sdm import SDMConfig
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,8 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--persistent_workers", action="store_true", default=True)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--amp", action="store_true", help="测试阶段启用AMP")
-    # CLIP-Gaze配置（应与训练时保持一致）
-    parser.add_argument("--use_clip_gaze", action="store_true", default=True, help="启用CLIP-Gaze（应与训练时配置一致）")
+    parser.add_argument("--use_sdm", action="store_true", default=True, help="启用SDM（应与训练时配置一致）")
     return parser.parse_args()
 
 
@@ -162,14 +161,13 @@ def main() -> None:
         persistent_workers=args.persistent_workers and args.num_workers > 0,
     )
 
-    # 配置模型（应与训练时保持一致）
-    clip_gaze_config = None
-    if args.use_clip_gaze:
-        clip_gaze_config = CLIPGazeConfig()
+    sdm_config = None
+    if args.use_sdm:
+        sdm_config = SDMConfig()
     
     cfg = ResNetFAMLiteConfig(
-        use_clip_gaze=args.use_clip_gaze,
-        clip_gaze_config=clip_gaze_config,
+        use_sdm=args.use_sdm,
+        sdm_config=sdm_config,
     )
     model = ResNetFAMLite(cfg).to(device)
     state_path = Path(args.checkpoint)
