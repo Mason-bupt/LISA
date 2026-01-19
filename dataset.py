@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import random
-import cv2  # 需要 pip install opencv-python
+import cv2
 import numpy as np
 import torch
 from dataclasses import dataclass
@@ -16,15 +16,14 @@ from torchvision.transforms import functional as F
 try:
     from data_normalization import normalize_data, vector_to_pitchyaw
 except ImportError:
-    raise ImportError("请确保当前目录下有 data_normalization.py 文件！")
+    raise ImportError("data_normalization.py not found in current directory!")
 
 _ARRAY_PATTERN = re.compile(r"[-+]?\d*\.\d+|[-+]?\d+")
 
 def _parse_numeric_array(raw: str) -> np.ndarray:
-    """解析字符串为 numpy 数组"""
     values = [float(x) for x in _ARRAY_PATTERN.findall(raw)]
     if not values:
-        raise ValueError(f"无法解析标注内容: {raw}")
+        raise ValueError(f"Cannot parse label content: {raw}")
     return np.array(values, dtype=np.float32)
 
 @dataclass(frozen=True)
@@ -35,9 +34,6 @@ class SampleEntry:
 
 
 class FaceGazeDataset(Dataset):
-    """
-    集成 3D 归一化的高性能 Gaze 数据集。
-    """
 
     def __init__(
         self,
@@ -62,9 +58,9 @@ class FaceGazeDataset(Dataset):
         subject_folders = sorted(self.root.glob("Subject*_*_data"))
         
         if not subject_folders:
-            raise RuntimeError(f"在 {self.root} 中未找到任何 Subject*_*_data 文件夹。")
+            raise RuntimeError(f"No Subject*_*_data folders found in {self.root}.")
             
-        print(f"[Dataset] 正在扫描 {len(subject_folders)} 个文件夹并缓存标签...")
+        print(f"[Dataset] Scanning {len(subject_folders)} folders and caching labels...")
         
         for subject_folder in subject_folders:
             image_dir = subject_folder / self.image_dir_name
@@ -73,7 +69,6 @@ class FaceGazeDataset(Dataset):
             if not image_dir.exists() or not label_dir.exists():
                 continue
                 
-            # 遍历标签文件
             for label_path in sorted(label_dir.glob("*_gaze.txt")):
                 stem = label_path.stem.replace("_gaze", "")
                 image_path = image_dir / f"{stem}_face.png"
@@ -87,7 +82,6 @@ class FaceGazeDataset(Dataset):
                         if eye_loc_key not in label_data or gaze_dir_key not in label_data:
                             return False
                         eye_loc = label_data[eye_loc_key]
-                        # 检查是否为无效坐标 [0, 0, 0]
                         if np.linalg.norm(eye_loc) < 1e-6:
                             return False
                         return True
@@ -108,7 +102,7 @@ class FaceGazeDataset(Dataset):
                 except Exception:
                     continue
 
-        print(f"[Dataset] 模式: {'Train' if self.is_train else 'Val'} | 有效样本数: {len(entries)}")
+        print(f"[Dataset] Mode: {'Train' if self.is_train else 'Val'} | Valid samples: {len(entries)}")
         return entries
 
     def __len__(self) -> int:
@@ -124,7 +118,7 @@ class FaceGazeDataset(Dataset):
                 
                 img_bgr = cv2.imread(str(sample.image_path))
                 if img_bgr is None:
-                    raise ValueError(f"图像读取失败: {sample.image_path}")
+                    raise ValueError(f"Failed to read image: {sample.image_path}")
                     
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                 h, w = img_rgb.shape[:2]
@@ -153,7 +147,7 @@ class FaceGazeDataset(Dataset):
                 )
                 
                 if norm_gaze_vec is None:
-                    raise ValueError("Gaze vector 无效")
+                    raise ValueError("Invalid gaze vector")
 
                 norm_angles = vector_to_pitchyaw(norm_gaze_vec)
                 gaze_angles = torch.tensor(norm_angles, dtype=torch.float32)
@@ -177,11 +171,10 @@ class FaceGazeDataset(Dataset):
             except Exception:
                 current_idx = random.randint(0, len(self.samples) - 1)
         
-        raise RuntimeError("连续 10 次加载样本失败，请检查数据集完整性！")
+        raise RuntimeError("Failed to load sample after 10 retries, please check dataset integrity!")
 
     @staticmethod
     def _parse_label_file(label_path: Path) -> Dict[str, np.ndarray]:
-        """解析标签文件为字典，值为 numpy array"""
         parsed = {}
         with label_path.open("r", encoding="utf-8") as handle:
             for line in handle:
