@@ -12,7 +12,6 @@ from .sdm import SDMModule, SDMConfig
 
 
 class FeatureAlign(nn.Module):
-    """对齐 layer2/layer4 特征"""
 
     def __init__(self, target_channels: int, guide_channels: int, fused_channels: int) -> None:
         super().__init__()
@@ -40,7 +39,6 @@ class FeatureAlign(nn.Module):
 
     @staticmethod
     def _ensure_chw(tensor: torch.Tensor, expected_channels: int) -> torch.Tensor:
-        """维度检查"""
         if tensor.ndim != 4:
             raise ValueError(f"Expected 4D tensor, got {tensor.ndim}D")
         
@@ -51,7 +49,6 @@ class FeatureAlign(nn.Module):
 
 
 class FrequencyModulation(nn.Module):
-    """利用频域替换低频信息"""
 
     def __init__(self, low_freq_ratio: float = 0.25, init_alpha: float = 0.3) -> None:
         super().__init__()
@@ -62,26 +59,19 @@ class FrequencyModulation(nn.Module):
     def forward(self, target: torch.Tensor, guide: torch.Tensor) -> torch.Tensor:
         B, C, H, W = target.shape
         
-        # 1. 使用 rfft2 (实数到复数)，利用共轭对称性
         fft_target = torch.fft.rfft2(target, dim=(-2, -1)) 
         fft_guide = torch.fft.rfft2(guide, dim=(-2, -1))
         
-        # 2. 获取 Mask (O(1) 缓存读取)
         mask = self._get_mask(H, W, target.device, fft_target.dtype)
         
-        # 3. alpha 控制融合强度（sigmoid -> (0,1)）
         alpha_val = torch.sigmoid(self.alpha).to(device=target.device, dtype=fft_target.real.dtype)
         
-        # 4. 频域融合（使用可学习 alpha）
-        # 注意：mask 是复数 dtype，alpha_val 是实数，二者可乘
         fused_fft = fft_target * (1.0 - alpha_val * mask) + fft_guide * (alpha_val * mask)
         
-        # 5. 逆变换回实数域
         fused = torch.fft.irfft2(fused_fft, s=(H, W), dim=(-2, -1))
         return fused
 
     def _get_mask(self, h: int, w: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
-        """生成并缓存 Mask"""
         w_rfft = w // 2 + 1
         if (self.cached_mask is not None and 
             self.cached_mask.shape[-2:] == (h, w_rfft) and 
@@ -101,7 +91,6 @@ class FrequencyModulation(nn.Module):
 
 
 class AttentionModulation(nn.Module):
-    """语义空间注意力"""
 
     def __init__(self, channels: int, reduction: int = 4, residual: float = 0.5) -> None:
         super().__init__()
@@ -128,7 +117,6 @@ class FAMFusion(nn.Module):
 
 
 class RegressionHead(nn.Module):
-    """回归头"""
     def __init__(self, channels: int, hidden_dim: int = 512, output_dim: int = 2) -> None:
         super().__init__()
         self.channels = channels
@@ -151,10 +139,6 @@ class RegressionHead(nn.Module):
 
     @staticmethod
     def _build_coords(batch: int, h: int, w: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
-        """
-        生成 coord maps，范围 [-1,1]
-        返回 shape: [B, 2, H, W]
-        """
         ys = torch.linspace(-1.0, 1.0, steps=h, device=device, dtype=dtype)
         xs = torch.linspace(-1.0, 1.0, steps=w, device=device, dtype=dtype)
         
@@ -182,7 +166,6 @@ class RegressionHead(nn.Module):
 
 @dataclass
 class ResNetFAMLiteConfig:
-    """ResNet18-FAM-Lite 配置"""
     backbone: ResNet18FeatureConfig = field(default_factory=ResNet18FeatureConfig)
     
     fusion_channels: int = 256       
@@ -194,7 +177,6 @@ class ResNetFAMLiteConfig:
 
 
 class ResNetFAMLite(nn.Module):
-    """ResNet18-FAM-Lite 模型"""
     def __init__(self, cfg: Optional[ResNetFAMLiteConfig] = None) -> None:
         super().__init__()
         cfg = cfg or ResNetFAMLiteConfig()
@@ -238,5 +220,3 @@ class ResNetFAMLite(nn.Module):
             output["text_features"] = sdm_output["text_features"]
         
         return output
-
-

@@ -16,7 +16,6 @@ except ImportError:
 
 @dataclass
 class SDMConfig:
-    """SDM配置"""
     clip_model_name: str = "openai/clip-vit-base-patch32"
     num_gaze_irrelevant_prompts: int = 8
     feature_separation_weight: float = 15.0
@@ -24,10 +23,6 @@ class SDMConfig:
 
 
 class SDMModule(nn.Module):
-    """
-    SDM核心模块
-    使用CLIP文本编码器生成与注视无关的特征，并通过特征分离损失push away这些特征
-    """
     
     def __init__(self, cfg: SDMConfig, input_feature_dim: int):
         super().__init__()
@@ -35,7 +30,7 @@ class SDMModule(nn.Module):
         
         if CLIPModel is None or CLIPTokenizer is None:
             raise ImportError(
-                "需要安装transformers库: pip install transformers"
+                "transformers library required: pip install transformers"
             )
         
         self.clip_model = CLIPModel.from_pretrained(cfg.clip_model_name)
@@ -71,7 +66,6 @@ class SDMModule(nn.Module):
         )
     
     def _build_prompts(self):
-        """构建与注视无关的文本提示"""
         self.prompts = []
         for template in self.gaze_irrelevant_templates:
             for attr in self.gaze_irrelevant_attributes:
@@ -86,12 +80,6 @@ class SDMModule(nn.Module):
     
     @torch.no_grad()
     def encode_text_prompts(self, device: torch.device) -> torch.Tensor:
-        """
-        编码文本提示为特征向量
-        
-        Returns:
-            text_features: [num_prompts, embedding_dim] 与注视无关的文本特征
-        """
         inputs = self.tokenizer(
             self.prompts,
             padding=True,
@@ -113,15 +101,6 @@ class SDMModule(nn.Module):
         return text_features
     
     def forward(self, gaze_features: torch.Tensor) -> dict[str, torch.Tensor]:
-        """
-        Args:
-            gaze_features: [batch_size, feature_dim] 注视相关特征
-        
-        Returns:
-            dict包含:
-                - gaze_features_proj: 投影后的注视特征
-                - text_features: 与注视无关的文本特征
-        """
         device = gaze_features.device
         
         gaze_features_proj = self.feature_proj(gaze_features)
@@ -147,17 +126,6 @@ def feature_separation_loss(
     text_features: torch.Tensor,
     temperature: float = 0.07,
 ) -> torch.Tensor:
-    """
-    特征分离损失：最小化注视相关特征与注视无关特征之间的相似度
-    
-    Args:
-        gaze_features: [batch_size, embedding_dim] 注视相关特征（已归一化）
-        text_features: [num_prompts, embedding_dim] 与注视无关的文本特征（已归一化）
-        temperature: 温度参数（保留以保持接口兼容，但不再使用）
-    
-    Returns:
-        loss: 标量损失值
-    """
     if torch.isnan(gaze_features).any() or torch.isinf(gaze_features).any():
         return torch.tensor(0.0, device=gaze_features.device, requires_grad=True)
     if torch.isnan(text_features).any() or torch.isinf(text_features).any():
@@ -173,4 +141,3 @@ def feature_separation_loss(
     loss = torch.clamp(loss, min=0.0, max=10.0)
     
     return loss
-
