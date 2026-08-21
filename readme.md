@@ -16,8 +16,6 @@ The framework contains three main components:
 - **FAM Fusion**: injects stable low-frequency semantic cues in the Fourier domain and applies spatial saliency gating to emphasize gaze-relevant regions.
 - **SDM**: a training-time semantic disentanglement module that uses frozen CLIP text features to push gaze features away from gaze-irrelevant appearance attributes.
 
-The inference backbone has about **4.39M parameters**. SDM uses a frozen CLIP encoder as an auxiliary training signal and is not required for the lightweight deployment model.
-
 ## Repository structure
 
 ```text
@@ -128,9 +126,7 @@ python test_by_subject.py \
 ## Model notes
 
 - The visual backbone uses a truncated ResNet-18 feature extractor.
-- The reported lightweight model size, **4.39M parameters**, corresponds to the inference/deployment gaze estimation network.
-- CLIP parameters in SDM are frozen and used as auxiliary supervision during training.
-- For deployment, SDM can be disabled and only the visual gaze estimation pathway is needed.
+- SDM uses frozen CLIP text features as auxiliary supervision during training.
 
 ## Citation
 
